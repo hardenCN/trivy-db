@@ -99,7 +99,7 @@ func InitDB(dbType, dsn, dbDir string) (err error) {
 		}
 		return nil
 	} else {
-		return Init(dsn)
+		return Init(dbDir)
 	}
 }
 
