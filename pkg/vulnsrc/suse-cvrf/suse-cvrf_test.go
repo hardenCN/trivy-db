@@ -8,9 +8,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/aquasecurity/trivy-db/pkg/types"
-	"github.com/aquasecurity/trivy-db/pkg/vulnsrc/vulnerability"
-	"github.com/aquasecurity/trivy-db/pkg/vulnsrctest"
+	"github.com/hardenCN/trivy-db/pkg/types"
+	"github.com/hardenCN/trivy-db/pkg/vulnsrc/vulnerability"
+	"github.com/hardenCN/trivy-db/pkg/vulnsrctest"
 )
 
 func TestMain(m *testing.M) {

@@ -13,10 +13,10 @@ import (
 	"golang.org/x/xerrors"
 
 	"github.com/aquasecurity/go-version/pkg/version"
-	"github.com/aquasecurity/trivy-db/pkg/db"
-	"github.com/aquasecurity/trivy-db/pkg/types"
-	"github.com/aquasecurity/trivy-db/pkg/utils"
-	"github.com/aquasecurity/trivy-db/pkg/vulnsrc/vulnerability"
+	"github.com/hardenCN/trivy-db/pkg/db"
+	"github.com/hardenCN/trivy-db/pkg/types"
+	"github.com/hardenCN/trivy-db/pkg/utils"
+	"github.com/hardenCN/trivy-db/pkg/vulnsrc/vulnerability"
 )
 
 type Distribution int
@@ -271,7 +271,7 @@ func getPackage(packVer string) *Package {
 	}
 }
 
-// reference: https://github.com/aquasecurity/trivy-db/blob/5c844be3ba6b9ef13df640857a10f8737e360feb/pkg/vulnsrc/redhat/redhat.go#L196-L217
+// reference: https://github.com/hardenCN/trivy-db/blob/5c844be3ba6b9ef13df640857a10f8737e360feb/pkg/vulnsrc/redhat/redhat.go#L196-L217
 func splitPkgName(pkgName string) (string, string) {
 	var version string
 

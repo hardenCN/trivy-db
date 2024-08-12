@@ -12,11 +12,11 @@ import (
 	"golang.org/x/text/language"
 	"golang.org/x/xerrors"
 
-	"github.com/aquasecurity/trivy-db/pkg/db"
-	"github.com/aquasecurity/trivy-db/pkg/types"
-	"github.com/aquasecurity/trivy-db/pkg/utils"
-	"github.com/aquasecurity/trivy-db/pkg/vulnsrc/bucket"
-	"github.com/aquasecurity/trivy-db/pkg/vulnsrc/vulnerability"
+	"github.com/hardenCN/trivy-db/pkg/db"
+	"github.com/hardenCN/trivy-db/pkg/types"
+	"github.com/hardenCN/trivy-db/pkg/utils"
+	"github.com/hardenCN/trivy-db/pkg/vulnsrc/bucket"
+	"github.com/hardenCN/trivy-db/pkg/vulnsrc/vulnerability"
 )
 
 const (

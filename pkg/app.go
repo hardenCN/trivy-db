@@ -5,8 +5,8 @@ import (
 
 	"github.com/urfave/cli"
 
-	"github.com/aquasecurity/trivy-db/pkg/utils"
-	"github.com/aquasecurity/trivy-db/pkg/vulnsrc"
+	"github.com/hardenCN/trivy-db/pkg/utils"
+	"github.com/hardenCN/trivy-db/pkg/vulnsrc"
 )
 
 type AppConfig struct{}

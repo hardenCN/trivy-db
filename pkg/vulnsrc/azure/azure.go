@@ -10,10 +10,10 @@ import (
 	bolt "go.etcd.io/bbolt"
 	"golang.org/x/xerrors"
 
-	"github.com/aquasecurity/trivy-db/pkg/db"
-	"github.com/aquasecurity/trivy-db/pkg/types"
-	"github.com/aquasecurity/trivy-db/pkg/vulnsrc/azure/oval"
-	"github.com/aquasecurity/trivy-db/pkg/vulnsrc/vulnerability"
+	"github.com/hardenCN/trivy-db/pkg/db"
+	"github.com/hardenCN/trivy-db/pkg/types"
+	"github.com/hardenCN/trivy-db/pkg/vulnsrc/azure/oval"
+	"github.com/hardenCN/trivy-db/pkg/vulnsrc/vulnerability"
 )
 
 type Distribution int

@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/aquasecurity/trivy-db/pkg/db"
+	"github.com/hardenCN/trivy-db/pkg/db"
 )
 
 func TestInit(t *testing.T) {

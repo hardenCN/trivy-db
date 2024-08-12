@@ -1,6 +1,6 @@
 # trivy-db 
 
-![Build DB](https://github.com/aquasecurity/trivy-db/workflows/Trivy%20DB/badge.svg)
+![Build DB](https://github.com/hardenCN/trivy-db/workflows/Trivy%20DB/badge.svg)
 [![GitHub Release][release-img]][release]
 ![Downloads][download]
 [![Go Report Card][report-card-img]][report-card]
@@ -9,14 +9,14 @@
 
 [download]: https://img.shields.io/github/downloads/aquasecurity/trivy-db/total?logo=github
 [release-img]: https://img.shields.io/github/release/aquasecurity/trivy-db.svg?logo=github
-[release]: https://github.com/aquasecurity/trivy-db/releases
-[report-card-img]: https://goreportcard.com/badge/github.com/aquasecurity/trivy-db
-[report-card]: https://goreportcard.com/report/github.com/aquasecurity/trivy-db
-[go-doc-img]: https://godoc.org/github.com/aquasecurity/trivy-db?status.svg
-[go-doc]: https://godoc.org/github.com/aquasecurity/trivy-db
+[release]: https://github.com/hardenCN/trivy-db/releases
+[report-card-img]: https://goreportcard.com/badge/github.com/hardenCN/trivy-db
+[report-card]: https://goreportcard.com/report/github.com/hardenCN/trivy-db
+[go-doc-img]: https://godoc.org/github.com/hardenCN/trivy-db?status.svg
+[go-doc]: https://godoc.org/github.com/hardenCN/trivy-db
 [code-cov]: https://codecov.io/gh/aquasecurity/trivy-db/branch/main/graph/badge.svg
 [license-img]: https://img.shields.io/badge/License-Apache%202.0-blue.svg
-[license]: https://github.com/aquasecurity/trivy-db/blob/main/LICENSE
+[license]: https://github.com/hardenCN/trivy-db/blob/main/LICENSE
 
 ## Overview
 `trivy-db` is a CLI tool and a library to manipulate Trivy DB.

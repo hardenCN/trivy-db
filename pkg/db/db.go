@@ -2,17 +2,22 @@ package db
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime/debug"
 	"strings"
 
 	bolt "go.etcd.io/bbolt"
 	"golang.org/x/xerrors"
 
-	"github.com/aquasecurity/trivy-db/pkg/log"
-	"github.com/aquasecurity/trivy-db/pkg/types"
+	"github.com/hardenCN/trivy-db/pkg/log"
+	"github.com/hardenCN/trivy-db/pkg/types"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
 type CustomPut func(dbc Operation, tx *bolt.Tx, adv interface{}) error
@@ -20,6 +25,7 @@ type CustomPut func(dbc Operation, tx *bolt.Tx, adv interface{}) error
 const SchemaVersion = 2
 
 var db *bolt.DB
+var sqlDb *sql.DB
 
 type Operation interface {
 	BatchUpdate(fn func(*bolt.Tx) error) (err error)
@@ -81,6 +87,49 @@ func Init(dbDir string) (err error) {
 	return nil
 }
 
+func InitDB(dbType, dsn, dbDir string) (err error) {
+	if len(dbType) > 0 && dbType != "sqlite" {
+		err = Init(dbDir)
+		if err != nil {
+			return xerrors.Errorf("failed to open db: %w", err)
+		}
+		sqlDb, err = dbOpen(dbType, dsn)
+		if err != nil {
+			return xerrors.Errorf("failed to open sql db: %w", err)
+		}
+		return nil
+	} else {
+		return Init(dsn)
+	}
+}
+
+func dbOpen(dbType, dsn string) (*sql.DB, error) {
+	var sqldb *sql.DB
+	var err error
+	switch dbType {
+	case "mysql":
+		sqldb, err = sql.Open("mysql", dsn)
+	case "postgres", "postgresql", "pg":
+		pgconfig, cfgErr := pgxpool.ParseConfig(dsn)
+		if cfgErr != nil {
+			err = xerrors.Errorf("failed to parse db config: %w", cfgErr)
+		}
+		sqldb = stdlib.OpenDB(*pgconfig.ConnConfig)
+	default:
+		sqldb, err = sql.Open("sqlite", dsn)
+	}
+	if err != nil {
+		return nil, xerrors.Errorf("can't open db: %w", err)
+	}
+	sqldb.SetMaxOpenConns(30)
+	sqldb.SetMaxIdleConns(10)
+	err = sqldb.Ping()
+	if err != nil {
+		return nil, xerrors.Errorf("can't ping db: %w", err)
+	}
+	return sqldb, nil
+}
+
 func Path(dbDir string) string {
 	dbPath := filepath.Join(dbDir, "trivy.db")
 	return dbPath
@@ -88,11 +137,18 @@ func Path(dbDir string) string {
 
 func Close() error {
 	// Skip closing the database if the connection is not established.
-	if db == nil {
+	if db == nil && sqlDb == nil {
 		return nil
 	}
-	if err := db.Close(); err != nil {
-		return xerrors.Errorf("failed to close DB: %w", err)
+	if db != nil {
+		if err := db.Close(); err != nil {
+			return xerrors.Errorf("failed to close DB: %w", err)
+		}
+	}
+	if sqlDb != nil {
+		if err := sqlDb.Close(); err != nil {
+			return xerrors.Errorf("failed to close sqlDB: %w", err)
+		}
 	}
 	return nil
 }
@@ -168,74 +224,183 @@ type Value struct {
 	Content []byte
 }
 
+func driverName(sqldb *sql.DB) string {
+	driver := sqldb.Driver()
+	a := reflect.TypeOf(driver)
+	return a.String()
+}
+
 func (dbc Config) forEach(bktNames []string) (map[string]Value, error) {
-	if len(bktNames) < 2 {
-		return nil, xerrors.Errorf("bucket must be nested: %v", bktNames)
-	}
-	rootBucket, nestedBuckets := bktNames[0], bktNames[1:]
-
-	values := map[string]Value{}
-	err := db.View(func(tx *bolt.Tx) error {
-		var rootBuckets []string
-
+	isSql := sqlDb != nil
+	if isSql {
+		// 使用mysql或pg
+		dn := driverName(sqlDb)
+		if len(bktNames) < 2 {
+			return nil, xerrors.Errorf("bucket must be nested: %v", bktNames)
+		}
+		rootBucket, nestedBuckets := bktNames[0], bktNames[1:]
+		values := map[string]Value{}
+		dsMap := map[string]types.DataSource{}
+		db.View(func(tx *bolt.Tx) error {
+			var rootBuckets []string
+			if strings.Contains(rootBucket, "::") {
+				// e.g. "pip::", "rubygems::"
+				prefix := []byte(rootBucket)
+				c := tx.Cursor()
+				for k, _ := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = c.Next() {
+					rootBuckets = append(rootBuckets, string(k))
+				}
+			} else {
+				// e.g. "GitHub Security Advisory Composer"
+				rootBuckets = append(rootBuckets, rootBucket)
+			}
+			for _, r := range rootBuckets {
+				root := tx.Bucket([]byte(r))
+				if root == nil {
+					continue
+				}
+				source, err := dbc.getDataSource(tx, r)
+				if err != nil {
+					log.Logger.Debugf("Data source error: %s", err)
+				}
+				dsMap[r] = source
+			}
+			return nil
+		})
+		querySql := `
+					SELECT v.vulnerability_id, v.platform, v.segment, v.package, v.value
+					FROM vulnerability_advisories v 
+					WHERE v.platform %s %s AND v.package in (%s)`
+		var platform string
+		var platformOperator string
+		var inClauseStr string
 		if strings.Contains(rootBucket, "::") {
+			platformOperator = "like"
 			// e.g. "pip::", "rubygems::"
-			prefix := []byte(rootBucket)
-			c := tx.Cursor()
-			for k, _ := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = c.Next() {
-				rootBuckets = append(rootBuckets, string(k))
-			}
+			platform = "'" + rootBucket + "%'"
 		} else {
+			platformOperator = "="
 			// e.g. "GitHub Security Advisory Composer"
-			rootBuckets = append(rootBuckets, rootBucket)
+			platform = "'" + rootBucket + "'"
 		}
+		switch dn {
+		case "*stdlib.Driver":
+			// 动态构建 IN 子句
+			var inClause strings.Builder
+			for i := range nestedBuckets {
+				inClause.WriteString(fmt.Sprintf("$%d,", i+1))
+			}
+			inClauseStr = inClause.String()
+			inClauseStr = inClauseStr[:len(inClauseStr)-1] // 去掉最后一个逗号
+		default:
+			// 动态构建 IN 子句
+			inClauseStr = strings.Repeat("?,", len(nestedBuckets))
+			inClauseStr = inClauseStr[:len(inClauseStr)-1] // 去掉最后一个逗号
+		}
+		querySql = fmt.Sprintf(querySql, platformOperator, platform, inClauseStr)
+		// 转换参数为 interface{} 切片
+		args := make([]interface{}, len(nestedBuckets))
+		for i, pkg := range nestedBuckets {
+			args[i] = pkg
+		}
+		// 执行查询
+		rows, err := sqlDb.Query(querySql, args...)
+		if err != nil {
+			return nil, xerrors.Errorf("failed to exe sqlDb query: %w", err)
+		}
+		defer rows.Close()
+		// 遍历结果
+		for rows.Next() {
+			var vulnerabilityId, platformValue, segmentValue, pkgValue string
+			var value []byte
+			if err := rows.Scan(&vulnerabilityId, &platformValue, &segmentValue, &pkgValue, &value); err != nil {
+				return nil, xerrors.Errorf("failed to loop sqldb rows: %w", err)
+			}
+			var dsKey string
+			if len(segmentValue) > 0 {
+				dsKey = platformValue + " " + segmentValue
+			} else {
+				dsKey = platformValue
+			}
+			values[vulnerabilityId] = Value{
+				Source:  dsMap[dsKey],
+				Content: value,
+			}
+		}
+		// 检查遍历中的错误
+		if err = rows.Err(); err != nil {
+			return nil, xerrors.Errorf("failed to loop sqldb rows: %w", err)
+		}
+		return values, nil
+	} else {
+		if len(bktNames) < 2 {
+			return nil, xerrors.Errorf("bucket must be nested: %v", bktNames)
+		}
+		rootBucket, nestedBuckets := bktNames[0], bktNames[1:]
 
-		for _, r := range rootBuckets {
-			root := tx.Bucket([]byte(r))
-			if root == nil {
-				continue
+		values := map[string]Value{}
+		err := db.View(func(tx *bolt.Tx) error {
+			var rootBuckets []string
+
+			if strings.Contains(rootBucket, "::") {
+				// e.g. "pip::", "rubygems::"
+				prefix := []byte(rootBucket)
+				c := tx.Cursor()
+				for k, _ := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = c.Next() {
+					rootBuckets = append(rootBuckets, string(k))
+				}
+			} else {
+				// e.g. "GitHub Security Advisory Composer"
+				rootBuckets = append(rootBuckets, rootBucket)
 			}
 
-			source, err := dbc.getDataSource(tx, r)
-			if err != nil {
-				log.Logger.Debugf("Data source error: %s", err)
-			}
+			for _, r := range rootBuckets {
+				root := tx.Bucket([]byte(r))
+				if root == nil {
+					continue
+				}
 
-			bkt := root
-			for _, nestedBkt := range nestedBuckets {
-				bkt = bkt.Bucket([]byte(nestedBkt))
+				source, err := dbc.getDataSource(tx, r)
+				if err != nil {
+					log.Logger.Debugf("Data source error: %s", err)
+				}
+
+				bkt := root
+				for _, nestedBkt := range nestedBuckets {
+					bkt = bkt.Bucket([]byte(nestedBkt))
+					if bkt == nil {
+						break
+					}
+				}
 				if bkt == nil {
-					break
+					continue
 				}
-			}
-			if bkt == nil {
-				continue
-			}
 
-			err = bkt.ForEach(func(k, v []byte) error {
-				if len(v) == 0 {
+				err = bkt.ForEach(func(k, v []byte) error {
+					if len(v) == 0 {
+						return nil
+					}
+					// Copy the byte slice so it can be used outside of the current transaction
+					copiedContent := make([]byte, len(v))
+					copy(copiedContent, v)
+
+					values[string(k)] = Value{
+						Source:  source,
+						Content: copiedContent,
+					}
 					return nil
+				})
+				if err != nil {
+					return xerrors.Errorf("db foreach error: %w", err)
 				}
-				// Copy the byte slice so it can be used outside of the current transaction
-				copiedContent := make([]byte, len(v))
-				copy(copiedContent, v)
-
-				values[string(k)] = Value{
-					Source:  source,
-					Content: copiedContent,
-				}
-				return nil
-			})
-			if err != nil {
-				return xerrors.Errorf("db foreach error: %w", err)
 			}
+			return nil
+		})
+		if err != nil {
+			return nil, xerrors.Errorf("failed to get all key/value in the specified bucket: %w", err)
 		}
-		return nil
-	})
-	if err != nil {
-		return nil, xerrors.Errorf("failed to get all key/value in the specified bucket: %w", err)
+		return values, nil
 	}
-	return values, nil
 }
 
 func (dbc Config) deleteBucket(bucketName string) error {

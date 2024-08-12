@@ -3,7 +3,7 @@ package redhatoval
 import (
 	"encoding/json"
 
-	"github.com/aquasecurity/trivy-db/pkg/types"
+	"github.com/hardenCN/trivy-db/pkg/types"
 )
 
 type redhatOVAL struct {

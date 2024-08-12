@@ -12,13 +12,13 @@ import (
 	"k8s.io/utils/clock"
 	fake "k8s.io/utils/clock/testing"
 
-	"github.com/aquasecurity/trivy-db/pkg/db"
-	"github.com/aquasecurity/trivy-db/pkg/dbtest"
-	"github.com/aquasecurity/trivy-db/pkg/metadata"
-	"github.com/aquasecurity/trivy-db/pkg/types"
-	"github.com/aquasecurity/trivy-db/pkg/vulndb"
-	"github.com/aquasecurity/trivy-db/pkg/vulnsrc"
-	"github.com/aquasecurity/trivy-db/pkg/vulnsrc/vulnerability"
+	"github.com/hardenCN/trivy-db/pkg/db"
+	"github.com/hardenCN/trivy-db/pkg/dbtest"
+	"github.com/hardenCN/trivy-db/pkg/metadata"
+	"github.com/hardenCN/trivy-db/pkg/types"
+	"github.com/hardenCN/trivy-db/pkg/vulndb"
+	"github.com/hardenCN/trivy-db/pkg/vulnsrc"
+	"github.com/hardenCN/trivy-db/pkg/vulnsrc/vulnerability"
 )
 
 type fakeVulnSrc struct{}
