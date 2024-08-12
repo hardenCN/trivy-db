@@ -123,10 +123,6 @@ func dbOpen(dbType, dsn string) (*sql.DB, error) {
 	}
 	sqldb.SetMaxOpenConns(30)
 	sqldb.SetMaxIdleConns(10)
-	err = sqldb.Ping()
-	if err != nil {
-		return nil, xerrors.Errorf("can't ping db: %w", err)
-	}
 	return sqldb, nil
 }
 
