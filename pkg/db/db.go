@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime/debug"
 	"strings"
 
@@ -226,6 +227,23 @@ func driverName(sqldb *sql.DB) string {
 	return a.String()
 }
 
+var numRe = regexp.MustCompile(`\d+`)
+
+func parsePlatformAndSegment(s string) (string, string) {
+	const alpineEdgeSegment = "edge"
+	platform := s
+	segment := ""
+	splited := strings.Split(s, " ")
+	if len(splited) > 1 {
+		last := splited[len(splited)-1]
+		if numRe.MatchString(last) || last == alpineEdgeSegment {
+			platform = strings.Join(splited[0:len(splited)-1], " ")
+			segment = last
+		}
+	}
+	return platform, segment
+}
+
 func (dbc Config) forEach(bktNames []string) (map[string]Value, error) {
 	isSql := sqlDb != nil
 	if isSql {
@@ -266,18 +284,22 @@ func (dbc Config) forEach(bktNames []string) (map[string]Value, error) {
 		querySql := `
 					SELECT v.vulnerability_id, v.platform, v.segment, v.package, v.value
 					FROM vulnerability_advisories v 
-					WHERE v.platform %s %s AND v.package in (%s)`
+					WHERE v.platform %s %s %s AND v.package in (%s)`
 		var platform string
 		var platformOperator string
+		var segmentWhere string
 		var inClauseStr string
 		if strings.Contains(rootBucket, "::") {
 			platformOperator = "like"
 			// e.g. "pip::", "rubygems::"
 			platform = "'" + rootBucket + "%'"
+			segmentWhere = ""
 		} else {
+			p, s := parsePlatformAndSegment(rootBucket)
 			platformOperator = "="
 			// e.g. "GitHub Security Advisory Composer"
-			platform = "'" + rootBucket + "'"
+			platform = "'" + p + "'"
+			segmentWhere = "AND v.segment = '" + s + "'"
 		}
 		switch dn {
 		case "*stdlib.Driver":
@@ -293,7 +315,7 @@ func (dbc Config) forEach(bktNames []string) (map[string]Value, error) {
 			inClauseStr = strings.Repeat("?,", len(nestedBuckets))
 			inClauseStr = inClauseStr[:len(inClauseStr)-1] // 去掉最后一个逗号
 		}
-		querySql = fmt.Sprintf(querySql, platformOperator, platform, inClauseStr)
+		querySql = fmt.Sprintf(querySql, platformOperator, platform, segmentWhere, inClauseStr)
 		// 转换参数为 interface{} 切片
 		args := make([]interface{}, len(nestedBuckets))
 		for i, pkg := range nestedBuckets {
